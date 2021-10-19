@@ -18,12 +18,12 @@ class ReservationsView(APIView):
     def get(self, request):
         """
             Example:
-                curl -L 'localhost:5000/reservations?date=2021-10-18'
+                curl -L 'localhost:5000/reservations?start_date=2021-10-18'
         """
-        date_from_request = request.GET.get('date')
+        date_from_request = request.GET.get('start_date')
         try:
             # for invalid date type
-            date = datetime.strptime(date_from_request, "%Y-%m-%d")
+            date = datetime.strptime(date_from_request, "%Y-%m-%d %H:%M:%S.%f")
         except (TypeError, ValueError):
             raise Http404
 
