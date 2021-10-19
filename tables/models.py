@@ -21,4 +21,4 @@ class Reservation(models.Model):
 
     def finish_hour(self):
         duration_time = timedelta(hours=int(self.duration))
-        return (self.date + duration_time).hour 
+        return self.date + duration_time 
