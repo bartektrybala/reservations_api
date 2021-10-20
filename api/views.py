@@ -1,4 +1,3 @@
-import requests
 import io
 
 from django.shortcuts import render
@@ -6,11 +5,10 @@ from tables.models import Table, Reservation
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import Http404
-from rest_framework import serializers, status
-from datetime import datetime, time, timedelta, tzinfo
+from datetime import datetime, time, timedelta
 from rich import print
 from django.db.models import Q
-from rest_framework.parsers import JSONParser
+from rest_framework import status
 
 from tables.serializers import ReservationSerializer, TableSerializer
 
@@ -36,26 +34,43 @@ class ReservationsView(APIView):
                         -d "{
                             "date": "2021-10-19+16:22:50.123",
                             "duration": "3",
-                            "seatNumber": "2",
+                            "tableNumber": "2",
                             "fullName": "Paul Smith",
                             "phone": "997 123 997",
                             "email": "paul@email.com",
                             "numberOfSeats": "5"
                         }" -X POST
 
-            curl -L localhost:5000/reservations/ -H "Content-Type: application/json" -d '{"date": "2021-10-19 16:22:50.123", "duration": "3", "seatNumber": "2", "fullName": "Paul Smith", "phone": "997 123 997", "email": "paul@email.com", "numberOfSeats": "5"}' -X POST
+            curl -L localhost:5000/reservations/ -H "Content-Type: application/json" -d '{"date": "2021-10-19 16:22:50.123", "duration": "3", "tableNumber": "14", "fullName": "Paul Smith", "phone": "997 123 997", "email": "paul@email.com", "numberOfSeats": "5"}' -X POST
         """
         date = get_date_from_request(request.data['date'])
         duration = int(request.data['duration'])
-        seat_number = request.data['seatNumber']
         full_name = request.data['fullName']
         phone = request.data['phone']
         email = request.data['email']
-        number_of_seats = request.data['numberOfSeats']
+        number_of_seats = int(request.data['numberOfSeats'])
+        table = Table.objects.get(number=request.data['tableNumber'])
 
-        available_tables = AvailableTablesView.get_available_tables(number_of_seats, date, duration)
-        print(available_tables)
-        return Response()
+        if table in AvailableTablesView.get_available_tables(number_of_seats, date, duration):
+            return self.make_reservation(date, duration, table, full_name, phone, email, number_of_seats)
+        else:
+            return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def make_reservation(self, date, duration, table, full_name, phone, email, number_of_seats):
+        try:
+            r = Reservation(
+                table = table,
+                date = date,
+                duration = duration,
+                full_name = full_name,
+                phone = phone,
+                email = email,
+                number_of_seats = number_of_seats
+            )
+            r.save()
+            return Response(status=status.HTTP_201_CREATED)
+        except:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 

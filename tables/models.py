@@ -13,7 +13,6 @@ class Reservation(models.Model):
     table = ForeignKey("Table", on_delete=CASCADE)
     date = DateTimeField()
     duration = IntegerField()
-    seat_number = IntegerField()
     full_name = CharField(max_length=255)
     phone = CharField(max_length=31)
     email = EmailField()
