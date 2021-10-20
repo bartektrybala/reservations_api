@@ -1,3 +1,6 @@
+import requests
+import io
+
 from django.shortcuts import render
 from tables.models import Table, Reservation
 from rest_framework.views import APIView
@@ -7,25 +10,19 @@ from rest_framework import serializers, status
 from datetime import datetime, time, timedelta, tzinfo
 from rich import print
 from django.db.models import Q
+from rest_framework.parsers import JSONParser
 
 from tables.serializers import ReservationSerializer, TableSerializer
 
 
 class ReservationsView(APIView):
-    """
-        List reservations for the day, or create new reservation.
-    """
     def get(self, request):
         """
+            Return list of reservations for the day.
             Example:
                 curl -L 'localhost:5000/reservations?start_date=2021-10-18'
         """
-        date_from_request = request.GET.get('start_date')
-        try:
-            # for invalid date type
-            date = datetime.strptime(date_from_request, "%Y-%m-%d %H:%M:%S.%f")
-        except (TypeError, ValueError):
-            raise Http404
+        date = get_date_from_request(request.GET.get('start_date'))
 
         reservations = Reservation.objects.filter(date__date=date)
         serializer = ReservationSerializer(reservations, many=True)
@@ -33,7 +30,40 @@ class ReservationsView(APIView):
 
     def post(self, request):
         """
+            Create new reservation for a table.
+            Example:
+                curl -L 'localhost:5000/reservations/' -H "Content-Type: application/json" 
+                        -d "{
+                            "date": "2021-10-19+16:22:50.123",
+                            "duration": "3",
+                            "seatNumber": "2",
+                            "fullName": "Paul Smith",
+                            "phone": "997 123 997",
+                            "email": "paul@email.com",
+                            "numberOfSeats": "5"
+                        }" -X POST
+
+            curl -L localhost:5000/reservations/ -H "Content-Type: application/json" -d '{"date": "2021-10-19 16:22:50.123", "duration": "3", "seatNumber": "2", "fullName": "Paul Smith", "phone": "997 123 997", "email": "paul@email.com", "numberOfSeats": "5"}' -X POST
         """
+        date = get_date_from_request(request.data['date'])
+        duration = request.data['duration']
+        seat_number = request.data['seatNumber']
+        full_name = request.data['fullName']
+        phone = request.data['phone']
+        email = request.data['email']
+        number_of_seats = request.data['numberOfSeats']
+
+        url = self.build_get_free_tables_url(request.get_host(), number_of_seats, date, duration, "free")
+        available_tables = requests.get(url)
+        stream = io.BytesIO(available_tables.content)
+        data = JSONParser().parse(stream)
+        return Response()
+
+    def build_get_free_tables_url(self, domain, min_seats, start_date, duration, status):
+        url = "http://{domain}/tables?min_seats={min_seats}&start_date={start_date}&duration={duration}&status={status}"\
+            .format(domain=domain, min_seats=min_seats, start_date=start_date, duration=duration, status=status)
+        return url
+
 
 class AvailableTablesView(APIView):
     """
@@ -46,21 +76,16 @@ class AvailableTablesView(APIView):
             - reservation for 3 hours
 
             Example:
-                curl -l 'localhost:5000/tables?status=200&min_seats=3&start_date=2021-10-19-16&duration=3
+                curl -L "localhost:5000/tables?min_seats=6&start_date=2021-10-19+16:22:50.123&duration=3&status=free"
             
             Return:
                 Array: []
         """
         min_seats = request.GET.get('min_seats')
-        start_date_from_request = request.GET.get('start_date')
+        start_date = get_date_from_request(request.GET.get('start_date'))
         duration = request.GET.get('duration')
         status = request.GET.get('status')
         if status == "free":
-            try:
-                start_date = datetime.strptime(start_date_from_request, "%Y-%m-%d %H:%M:%S.%f")
-            except (TypeError, ValueError):
-                raise Http404
-                
 
             available_tables = self.get_available_tables(min_seats, start_date, int(duration))
             serializer = TableSerializer(available_tables, many=True)
@@ -79,8 +104,8 @@ class AvailableTablesView(APIView):
         """
         finish_date = start_date + timedelta(hours=duration)
         reservations = self.get_ongoing_reservations(start_date, finish_date)
-        return Table.objects.filter(min_number_of_seats__lte=min_seats, max_number_of_seats__gte=min_seats)\
-            .exclude(id__in=reservations.values_list('table'))
+        seat_filter = Q(min_number_of_seats__lte=min_seats) & Q(max_number_of_seats__gte=min_seats)
+        return Table.objects.filter(seat_filter).exclude(id__in=reservations.values_list('table'))
 
 
     def get_ongoing_reservations(self, start_date, finish_date):
@@ -103,3 +128,9 @@ class AvailableTablesView(APIView):
             return True
         else:
             return False
+
+def get_date_from_request(date):
+    try:
+        return datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f")
+    except (TypeError, ValueError):
+                raise Http404
