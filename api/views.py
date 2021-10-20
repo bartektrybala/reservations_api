@@ -46,23 +46,17 @@ class ReservationsView(APIView):
             curl -L localhost:5000/reservations/ -H "Content-Type: application/json" -d '{"date": "2021-10-19 16:22:50.123", "duration": "3", "seatNumber": "2", "fullName": "Paul Smith", "phone": "997 123 997", "email": "paul@email.com", "numberOfSeats": "5"}' -X POST
         """
         date = get_date_from_request(request.data['date'])
-        duration = request.data['duration']
+        duration = int(request.data['duration'])
         seat_number = request.data['seatNumber']
         full_name = request.data['fullName']
         phone = request.data['phone']
         email = request.data['email']
         number_of_seats = request.data['numberOfSeats']
 
-        url = self.build_get_free_tables_url(request.get_host(), number_of_seats, date, duration, "free")
-        available_tables = requests.get(url)
-        stream = io.BytesIO(available_tables.content)
-        data = JSONParser().parse(stream)
+        available_tables = AvailableTablesView.get_available_tables(number_of_seats, date, duration)
+        print(available_tables)
         return Response()
 
-    def build_get_free_tables_url(self, domain, min_seats, start_date, duration, status):
-        url = "http://{domain}/tables?min_seats={min_seats}&start_date={start_date}&duration={duration}&status={status}"\
-            .format(domain=domain, min_seats=min_seats, start_date=start_date, duration=duration, status=status)
-        return url
 
 
 class AvailableTablesView(APIView):
@@ -83,17 +77,18 @@ class AvailableTablesView(APIView):
         """
         min_seats = request.GET.get('min_seats')
         start_date = get_date_from_request(request.GET.get('start_date'))
-        duration = request.GET.get('duration')
+        duration = int(request.GET.get('duration'))
         status = request.GET.get('status')
         if status == "free":
 
-            available_tables = self.get_available_tables(min_seats, start_date, int(duration))
+            available_tables = AvailableTablesView.get_available_tables(min_seats, start_date, duration)
             serializer = TableSerializer(available_tables, many=True)
             return Response(serializer.data)
         else:
             return Response()
     
-    def get_available_tables(self, min_seats, start_date, duration):
+    @staticmethod
+    def get_available_tables(min_seats, start_date, duration):
         """
             Auxliary function to check free tables.
 
@@ -103,20 +98,21 @@ class AvailableTablesView(APIView):
                     * excluded reserved tables
         """
         finish_date = start_date + timedelta(hours=duration)
-        reservations = self.get_ongoing_reservations(start_date, finish_date)
+        reservations = AvailableTablesView.get_ongoing_reservations(start_date, finish_date)
         seat_filter = Q(min_number_of_seats__lte=min_seats) & Q(max_number_of_seats__gte=min_seats)
         return Table.objects.filter(seat_filter).exclude(id__in=reservations.values_list('table'))
 
-
-    def get_ongoing_reservations(self, start_date, finish_date):
+    @staticmethod
+    def get_ongoing_reservations(start_date, finish_date):
         ongoing_reservations_ids = []
 
         for r in Reservation.objects.filter(date__date=start_date):
-            if self.duration_overlap(r, start_date, finish_date):
+            if AvailableTablesView.duration_overlap(r, start_date, finish_date):
                 ongoing_reservations_ids.append(r.id)
         return Reservation.objects.filter(id__in=ongoing_reservations_ids)
     
-    def duration_overlap(self, reservation, start_date, finish_date):
+    @staticmethod
+    def duration_overlap(reservation, start_date, finish_date):
         # naive aware confilct
         reservation.date = reservation.date.replace(tzinfo=None)
         # check every possibility
