@@ -9,6 +9,9 @@ class Table(models.Model):
     min_number_of_seats = IntegerField()
     max_number_of_seats = IntegerField()
 
+    def __str__(self):
+        return str(self.number)
+
 class Reservation(models.Model):
     table = ForeignKey("Table", on_delete=CASCADE)
     date = DateTimeField()
