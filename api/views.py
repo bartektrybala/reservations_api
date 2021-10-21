@@ -6,7 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, tzinfo
+import random
 from rich import print
 
 from tables.models import Table, Reservation
@@ -83,7 +84,6 @@ class ReservationsView(APIView):
         send_mail("Reservation confirmation", message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
 
 
-
 class AvailableTablesView(APIView):
     """
         List available tables at a certain time.
@@ -149,6 +149,41 @@ class AvailableTablesView(APIView):
             return True
         else:
             return False
+
+
+class CancelReservationView(APIView):
+    def put(self, request, *args, **kwargs):
+        """
+            Create task for cancel reservation.
+            Send generated verification code in email for cancel reservation.
+
+            Example:
+                curl -L 'localhost:5000/reservations/15' -H "Content-Type: application/json" -d '{"status": "requested cancellation"}' -X PUT
+        """
+        reservation_status = request.data['status']
+        if reservation_status == 'requested cancellation':
+            try:
+                reservation = Reservation.objects.get(id=kwargs['id'])
+            except (Reservation.DoesNotExist, ValueError):
+                return Response(status=status.HTTP_404_NOT_FOUND)
+
+            # check if requested cancellation is no later than 2 hours before
+            if reservation.date.replace(tzinfo=None) - datetime.now() < timedelta(hours=2):
+                return Response(status.HTTP_405_METHOD_NOT_ALLOWED)
+
+            reservation.verification_code = random.randint(100000, 999999)
+            reservation.save()
+
+            send_mail("Confirmation of the cancellation of the reservation",
+            "Code: {verification_code}".format(verification_code=reservation.verification_code),
+            from_email=settings.EMAIL_HOST_USER, recipent_list=[reservation.email], fail_silently=False)
+
+            return Response(status=status.HTTP_200_OK)
+            
+
+    def delete(self, request):
+        return 
+
 
 def get_date_from_request(date):
     try:

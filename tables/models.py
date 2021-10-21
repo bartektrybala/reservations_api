@@ -20,6 +20,7 @@ class Reservation(models.Model):
     phone = CharField(max_length=31)
     email = EmailField()
     number_of_seats = IntegerField()
+    verification_code = IntegerField(default=0)
 
     def finish_hour(self):
         duration_time = timedelta(hours=int(self.duration))
