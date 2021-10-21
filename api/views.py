@@ -69,15 +69,17 @@ class ReservationsView(APIView):
                 number_of_seats = number_of_seats
             )
             r.save()
-            self.send_confirmation_email(table, date, duration, full_name, phone, number_of_seats, email)
+            self.send_confirmation_email(table, date, duration, full_name, phone, number_of_seats, email, r)
             return Response(status=status.HTTP_201_CREATED)
         except:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
-    def send_confirmation_email(self, table, date, duration, full_name, phone, number_of_seats, email):
+    def send_confirmation_email(self, table, date, duration, full_name, phone, number_of_seats, email, reservation):
         message = "Reservation details:\n Table: {table}\n Date: {date}\n Duration: {duration}\n"\
-                    "Full name: {full_name}\n Phone: {phone}\n Number of seats: {number_of_seats}".format(
-                        table=table, date=date, duration=duration, full_name=full_name, phone=phone, number_of_seats=number_of_seats)
+                    "Full name: {full_name}\n Phone: {phone}\n Number of seats: {number_of_seats}\n"\
+                    "Unique reservation number: {unique_reservation_number}".format(
+                        table=table, date=date, duration=duration, full_name=full_name, phone=phone, number_of_seats=number_of_seats,
+                        unique_reservation_number=reservation.id)
         send_mail("Reservation confirmation", message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
 
 
