@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 
 from pathlib import Path
 
+from reservations_api.secrets import DJANGO_EMAIL_HOST, DJANGO_EMAIL_HOST_PASSWORD, DJANGO_EMAIL_HOST_USER, DJANGO_EMAIL_PORT, DJANGO_SECRET_KEY
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9zee(xz&s%+pz#ey)tn_neb-cpp!x4=d-6pz0a9ryx9am%)bwn'
+SECRET_KEY = DJANGO_SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -126,3 +128,9 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+EMAIL_HOST = DJANGO_EMAIL_HOST
+EMAIL_PORT = DJANGO_EMAIL_PORT
+EMAIL_HOST_USER = DJANGO_EMAIL_HOST_USER
+EMAIL_HOST_PASSWORD = DJANGO_EMAIL_HOST_PASSWORD
+EMAIL_USE_TLS = True

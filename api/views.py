@@ -70,6 +70,7 @@ class ReservationsView(APIView):
                 number_of_seats = number_of_seats
             )
             r.save()
+            print(r.id)
             self.send_confirmation_email(table, date, duration, full_name, phone, number_of_seats, email, r)
             return Response(status=status.HTTP_201_CREATED)
         except:
@@ -78,9 +79,9 @@ class ReservationsView(APIView):
     def send_confirmation_email(self, table, date, duration, full_name, phone, number_of_seats, email, reservation):
         message = "Reservation details:\n Table: {table}\n Date: {date}\n Duration: {duration}\n"\
                     "Full name: {full_name}\n Phone: {phone}\n Number of seats: {number_of_seats}\n"\
-                    "Unique reservation number: {unique_reservation_number}".format(
+                    "Unique reservation number: {reservation_id}".format(
                         table=table, date=date, duration=duration, full_name=full_name, phone=phone, number_of_seats=number_of_seats,
-                        unique_reservation_number=reservation.id)
+                        reservation_id=reservation.id)
         send_mail("Reservation confirmation", message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
 
 
@@ -173,16 +174,34 @@ class CancelReservationView(APIView):
 
             reservation.verification_code = random.randint(100000, 999999)
             reservation.save()
-
+            print(reservation.verification_code)
             send_mail("Confirmation of the cancellation of the reservation",
             "Code: {verification_code}".format(verification_code=reservation.verification_code),
-            from_email=settings.EMAIL_HOST_USER, recipent_list=[reservation.email], fail_silently=False)
+            from_email=settings.EMAIL_HOST_USER, recipient_list=[reservation.email], fail_silently=False)
 
             return Response(status=status.HTTP_200_OK)
             
 
-    def delete(self, request):
-        return 
+    def delete(self, request, *args, **kwargs):
+        """
+            Confirm cancelattion of reservation with verification code.
+            Send email with confirmation about reservation cancelled.
+
+            Example:
+                curl -l localhost:5000/reservations/15 -H "Content-Type: application/json" -d '{"verification_code": "123456"}' -X DELETE
+        """
+
+        try:
+            reservation = Reservation.objects.get(id=kwargs['id'])
+        except (Reservation.DoesNotExist, ValueError):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        print(reservation.verification_code)
+        if int(request.data['verification_code']) == reservation.verification_code:
+            reservation.delete()
+            print(Reservation.objects.filter(id=kwargs['id']))
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 def get_date_from_request(date):
