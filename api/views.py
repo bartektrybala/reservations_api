@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.http import Http404
 from django.db.models import Q
@@ -51,7 +52,10 @@ class ReservationsView(APIView):
         phone = request.data['phone']
         email = request.data['email']
         number_of_seats = int(request.data['numberOfSeats'])
-        table = Table.objects.get(number=request.data['tableNumber'])
+        try:
+            table = Table.objects.get(number=request.data['tableNumber'])
+        except (Reservation.DoesNotExist, ValueError):
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
         if table in AvailableTablesView.get_available_tables(number_of_seats, date, duration):
             return self.make_reservation(date, duration, table, full_name, phone, email, number_of_seats)
@@ -69,9 +73,13 @@ class ReservationsView(APIView):
                 email = email,
                 number_of_seats = number_of_seats
             )
-            r.save()
+            r.full_clean()
+        except ValidationError:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        try:
             print(r.id)
             self.send_confirmation_email(table, date, duration, full_name, phone, number_of_seats, email, r)
+            r.save()
             return Response(status=status.HTTP_201_CREATED)
         except:
             return Response(status=status.HTTP_400_BAD_REQUEST)
@@ -82,7 +90,7 @@ class ReservationsView(APIView):
                     "Unique reservation number: {reservation_id}".format(
                         table=table, date=date, duration=duration, full_name=full_name, phone=phone, number_of_seats=number_of_seats,
                         reservation_id=reservation.id)
-        send_mail("Reservation confirmation", message, settings.EMAIL_HOST_USER, [email], fail_silently=False)
+        send_mail("Reservation confirmation", message, settings.EMAIL_HOST_USER, [email], fail_silently=True)
 
 
 class AvailableTablesView(APIView):
