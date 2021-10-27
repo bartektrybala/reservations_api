@@ -1,3 +1,4 @@
+from typing import Type
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.http import Http404
@@ -21,7 +22,7 @@ class ReservationsView(APIView):
         """
             Return list of reservations for the day.
             Example:
-                curl -L 'localhost:5000/reservations?start_date=2021-10-18'
+                curl -L 'localhost:5000/reservations?start_date=2021-10-18+00:00:00.000'
         """
         date = get_date_from_request(request.GET.get('start_date'))
 
@@ -44,7 +45,7 @@ class ReservationsView(APIView):
                             "numberOfSeats": "5"
                         }" -X POST
 
-            curl -L localhost:5000/reservations/ -H "Content-Type: application/json" -d '{"date": "2021-10-19 16:22:50.123", "duration": "3", "tableNumber": "14", "fullName": "Paul Smith", "phone": "997 123 997", "email": "paul@email.com", "numberOfSeats": "5"}' -X POST
+            curl -L localhost:5000/reservations/ -H "Content-Type: application/json" -d '{"date": "2021-10-19 16:22:50.123", "duration": "3", "tableNumber": "53", "fullName": "Paul Smith", "phone": "997 123 997", "email": "paul@email.com", "numberOfSeats": "2"}' -X POST
         """
         date = get_date_from_request(request.data['date'])
         duration = int(request.data['duration'])
@@ -77,9 +78,8 @@ class ReservationsView(APIView):
         except ValidationError:
             return Response(status=status.HTTP_400_BAD_REQUEST)
         try:
-            print(r.id)
-            self.send_confirmation_email(table, date, duration, full_name, phone, number_of_seats, email, r)
             r.save()
+            self.send_confirmation_email(table, date, duration, full_name, phone, number_of_seats, email, r)
             return Response(status=status.HTTP_201_CREATED)
         except:
             return Response(status=status.HTTP_400_BAD_REQUEST)
@@ -88,9 +88,9 @@ class ReservationsView(APIView):
         message = "Reservation details:\n Table: {table}\n Date: {date}\n Duration: {duration}\n"\
                     "Full name: {full_name}\n Phone: {phone}\n Number of seats: {number_of_seats}\n"\
                     "Unique reservation number: {reservation_id}".format(
-                        table=table, date=date, duration=duration, full_name=full_name, phone=phone, number_of_seats=number_of_seats,
+                        table=table, date=date.strftime("%Y-%m-%d %H:%M"), duration=duration, full_name=full_name, phone=phone, number_of_seats=number_of_seats,
                         reservation_id=reservation.id)
-        send_mail("Reservation confirmation", message, settings.EMAIL_HOST_USER, [email], fail_silently=True)
+        send_mail(subject="Reservation confirmation", message=message, from_email=settings.EMAIL_HOST_USER, recipient_list=[email], fail_silently=False)
 
 
 class AvailableTablesView(APIView):
@@ -109,17 +109,19 @@ class AvailableTablesView(APIView):
             Return:
                 Array: []
         """
-        min_seats = request.GET.get('min_seats')
+        try:
+            min_seats = int(request.GET.get('min_seats'))
+            duration = int(request.GET.get('duration'))
+        except (ValueError, TypeError):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
         start_date = get_date_from_request(request.GET.get('start_date'))
-        duration = int(request.GET.get('duration'))
-        status = request.GET.get('status')
-        if status == "free":
-
+        request_status = request.GET.get('status')
+        if request_status == "free":
             available_tables = AvailableTablesView.get_available_tables(min_seats, start_date, duration)
             serializer = TableSerializer(available_tables, many=True)
             return Response(serializer.data)
         else:
-            return Response()
+            return Response(status=status.HTTP_404_NOT_FOUND)
     
     @staticmethod
     def get_available_tables(min_seats, start_date, duration):
@@ -182,12 +184,14 @@ class CancelReservationView(APIView):
 
             reservation.verification_code = random.randint(100000, 999999)
             reservation.save()
-            print(reservation.verification_code)
+
             send_mail("Confirmation of the cancellation of the reservation",
             "Code: {verification_code}".format(verification_code=reservation.verification_code),
             from_email=settings.EMAIL_HOST_USER, recipient_list=[reservation.email], fail_silently=False)
 
             return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_404_NOT_FOUND)
             
 
     def delete(self, request, *args, **kwargs):
@@ -198,15 +202,18 @@ class CancelReservationView(APIView):
             Example:
                 curl -l localhost:5000/reservations/15 -H "Content-Type: application/json" -d '{"verification_code": "123456"}' -X DELETE
         """
-
         try:
             reservation = Reservation.objects.get(id=kwargs['id'])
         except (Reservation.DoesNotExist, ValueError):
             return Response(status=status.HTTP_404_NOT_FOUND)
-        print(reservation.verification_code)
-        if int(request.data['verification_code']) == reservation.verification_code:
+
+        try:
+            v_code = int(request.data['verification_code']) 
+        except (TypeError, ValueError):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        if  v_code == reservation.verification_code:
             reservation.delete()
-            print(Reservation.objects.filter(id=kwargs['id']))
             return Response(status=status.HTTP_200_OK)
         else:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
@@ -216,4 +223,4 @@ def get_date_from_request(date):
     try:
         return datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f")
     except (TypeError, ValueError):
-                raise Http404
+        raise Http404
